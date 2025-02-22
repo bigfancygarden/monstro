@@ -45,7 +45,7 @@
     title.textContent = "Welcome to MONSTRO: AMIRA";
     title.style.cssText = `
       color: #333;
-      font-size: 24px;
+      font-size: 22px;
       margin-bottom: 16px;
     `;
     container.appendChild(title);
