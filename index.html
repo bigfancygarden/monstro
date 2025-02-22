@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <!-- Responsive scaling -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Face Assembly Game (Emoji Navigation with Modal)</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #fafafa;
+      font-family: sans-serif;
+      overflow: hidden;
+    }
+    canvas { display: block; }
+    /* Control buttons container (bottom nav for controls) */
+    #controlButtonsContainer {
+      position: fixed;
+      bottom: 70px; /* sits above asset nav */
+      left: 0;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 4px 8px;
+      display: flex;
+      justify-content: center;
+      gap: 4px; /* tightened gap */
+      background: rgba(255,255,255,0.95);
+      border-top: 1px solid #ccc;
+      z-index: 200;
+    }
+    #controlButtonsContainer button {
+      font-size: 34px;
+      padding: 4px 6px; /* slightly tighter padding */
+      background: transparent;
+      border: none;
+      cursor: pointer;
+    }
+    /* Asset buttons container (bottom nav for assets) */
+    #assetButtonsContainer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 4px 8px;  /* reduced padding */
+      display: flex;
+      flex-direction: row;
+      gap: 2px;         /* further reduced gap between buttons */
+      overflow-x: auto;
+      background: rgba(255,255,255,0.95);
+      border-top: 1px solid #ccc;
+      z-index: 150;
+    }
+    #assetButtonsContainer button {
+      font-size: 34px;
+      padding: 2px 4px;  /* reduced padding */
+      background: transparent;
+      border: none;
+      cursor: pointer;
+    }
+    #assetButtonsContainer::-webkit-scrollbar { display: none; }
+  </style>
+</head>
+<body>
+  <!-- HTML-based Navigation Bars -->
+  <div id="controlButtonsContainer"></div>
+  <div id="assetButtonsContainer"></div>
+  
+  <!-- External Scripts -->
+  <script src="assetGroups.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pixi.js@6.x/dist/browser/pixi.min.js"></script>
+  <!-- For the outline filter -->
+  <script src="https://cdn.jsdelivr.net/npm/pixi-filters@3.2.0/dist/pixi-filters.js"></script>
+  <script src="modals.js"></script>
+  <script src="popup.js"></script>
+  
+  <script>
+    /***********************
+     * Global Variables
+     ***********************/
+    let selectedContainer = null;
+    const draggableParts = [];
+    let activePointers = {}; // Global pointer tracking.
+    let initialTransform = null; // For multi-touch gestures.
+    
+    /***********************
+     * Outline Helpers
+     ***********************/
+    function addSelectionOutline(container) {
+      if (container.outlineFilter) return;
+      container.outlineFilter = new PIXI.filters.OutlineFilter(2, 0x00ff00);
+      container.children[0].filters = [container.outlineFilter];
+    }
+    function removeSelectionOutline(container) {
+      if (container.outlineFilter) {
+        container.children[0].filters = null;
+        container.outlineFilter = null;
+      }
+    }
+    function setSelected(container) {
+      draggableParts.forEach(part => removeSelectionOutline(part));
+      selectedContainer = container;
+      addSelectionOutline(container);
+    }
+    function clearSelection() {
+      if (selectedContainer) {
+        removeSelectionOutline(selectedContainer);
+        selectedContainer = null;
+      }
+    }
+    
+    /***********************
+     * Base Face Setter
+     ***********************/
+    function setBaseFace(asset) {
+      if (PIXI.Loader.shared.resources[asset.path]) {
+        baseFaceSprite.texture = PIXI.Loader.shared.resources[asset.path].texture;
+      } else {
+        console.error("Texture for", asset.name, "not found!");
+      }
+    }
+    
+    /***********************
+     * Create PixiJS Application
+     ***********************/
+    const app = new PIXI.Application({
+      backgroundColor: 0xffffff,
+      resizeTo: window
+    });
+    document.body.appendChild(app.view);
+    
+    /***********************
+     * Background Layer for Global Gestures
+     ***********************/
+    const backgroundLayer = new PIXI.Graphics();
+    backgroundLayer.beginFill(0x000000, 0);
+    backgroundLayer.drawRect(0, 0, app.screen.width, app.screen.height);
+    backgroundLayer.endFill();
+    backgroundLayer.interactive = true;
+    backgroundLayer.hitArea = new PIXI.Rectangle(0, 0, app.screen.width, app.screen.height);
+    app.stage.addChildAt(backgroundLayer, 0);
+    // Global dragging via background:
+    backgroundLayer.on('pointerdown', (e) => {
+      if (selectedContainer) {
+        selectedContainer.globalDragging = true;
+        const pos = e.data.getLocalPosition(app.stage);
+        selectedContainer.globalDragOffset = { x: pos.x - selectedContainer.x, y: pos.y - selectedContainer.y };
+      }
+    });
+    backgroundLayer.on('pointermove', (e) => {
+      if (selectedContainer && selectedContainer.globalDragging && Object.keys(activePointers).length === 1) {
+        const pos = e.data.getLocalPosition(app.stage);
+        selectedContainer.x = pos.x - selectedContainer.globalDragOffset.x;
+        selectedContainer.y = pos.y - selectedContainer.globalDragOffset.y;
+      }
+    });
+    backgroundLayer.on('pointerup', () => {
+      if (selectedContainer) {
+        selectedContainer.globalDragging = false;
+      }
+    });
+    backgroundLayer.on('pointerupoutside', () => {
+      if (selectedContainer) {
+        selectedContainer.globalDragging = false;
+      }
+    });
+    
+    /***********************
+     * Active Pointer Tracking (DOM Listeners)
+     ***********************/
+    app.view.addEventListener('pointerdown', (e) => {
+      activePointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+    });
+    app.view.addEventListener('pointermove', (e) => {
+      if (activePointers[e.pointerId]) {
+        activePointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+      }
+    });
+    app.view.addEventListener('pointerup', (e) => {
+      delete activePointers[e.pointerId];
+    });
+    app.view.addEventListener('pointercancel', (e) => {
+      delete activePointers[e.pointerId];
+    });
+    
+    /***********************
+     * Asset Loading
+     ***********************/
+    const assetList = { baseFace: 'images/base_face.png' };
+    for (let group in assetGroups) {
+      assetGroups[group].forEach(part => {
+        assetList[part.name] = part.path;
+      });
+    }
+    PIXI.Loader.shared.add(Object.values(assetList)).load(onAssetsLoaded);
+    
+    let baseFaceSprite;
+    function onAssetsLoaded() {
+      baseFaceSprite = new PIXI.Sprite(PIXI.Loader.shared.resources[assetList.baseFace].texture);
+      baseFaceSprite.anchor.set(0.5);
+      baseFaceSprite.scale.set(0.7);
+      baseFaceSprite.x = app.screen.width / 2;
+      baseFaceSprite.y = app.screen.height / 2;
+      app.stage.addChild(baseFaceSprite);
+      
+      createAssetButtons();    // HTML asset picker in bottom nav
+      createControlButtons();  // HTML controls in new bottom nav
+      layoutUI();
+    }
+    
+    /***********************
+     * Layout UI (Reposition base face & background)
+     ***********************/
+    function layoutUI() {
+      // Center base face.
+      if (baseFaceSprite) {
+        baseFaceSprite.x = app.screen.width / 2;
+        baseFaceSprite.y = app.screen.height / 2;
+      }
+      backgroundLayer.clear();
+      backgroundLayer.beginFill(0x000000, 0);
+      backgroundLayer.drawRect(0, 0, app.screen.width, app.screen.height);
+      backgroundLayer.endFill();
+      backgroundLayer.hitArea = new PIXI.Rectangle(0, 0, app.screen.width, app.screen.height);
+    }
+    
+    /***********************
+     * Global Gesture Handling (app.view)
+     ***********************/
+    app.view.addEventListener('pointermove', (e) => {
+      const pointers = Object.values(activePointers);
+      if (!selectedContainer) return;
+      if (pointers.length >= 2) {
+        selectedContainer.globalDragging = false;
+        const pKeys = Object.keys(activePointers);
+        const p1 = activePointers[pKeys[0]];
+        const p2 = activePointers[pKeys[1]];
+        const currentDistance = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        const currentAngle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+        if (!initialTransform) {
+          const flipFactor = (selectedContainer.scale.x < 0) ? -1 : 1;
+          initialTransform = {
+            distance: currentDistance,
+            angle: currentAngle,
+            scaleAbs: Math.abs(selectedContainer.scale.x),
+            rotation: selectedContainer.rotation,
+            flip: flipFactor
+          };
+        } else {
+          const scaleFactor = currentDistance / initialTransform.distance;
+          const angleDelta = currentAngle - initialTransform.angle;
+          const newScale = initialTransform.scaleAbs * scaleFactor;
+          selectedContainer.scale.x = initialTransform.flip * newScale;
+          selectedContainer.scale.y = newScale;
+          selectedContainer.rotation = initialTransform.rotation + angleDelta;
+        }
+      } else if (pointers.length === 1 && selectedContainer.globalDragging) {
+        const localPos = e.data.getLocalPosition(app.stage);
+        selectedContainer.x = localPos.x - selectedContainer.globalDragOffset.x;
+        selectedContainer.y = localPos.y - selectedContainer.globalDragOffset.y;
+        initialTransform = null;
+      }
+    });
+    app.view.addEventListener('pointerup', (e) => {
+      delete activePointers[e.pointerId];
+      if (Object.keys(activePointers).length < 2) {
+        initialTransform = null;
+      }
+    });
+    app.view.addEventListener('pointercancel', (e) => {
+      delete activePointers[e.pointerId];
+      if (Object.keys(activePointers).length < 2) {
+        initialTransform = null;
+      }
+    });
+    
+    /***********************
+     * Create Draggable Sprite (Local vs Global)
+     ***********************/
+    function createDraggableSprite(name, texturePath, startX, startY) {
+      const container = new PIXI.Container();
+      container.x = startX;
+      container.y = startY;
+      container.name = name;
+      container.interactive = true;
+      container.buttonMode = true;
+      container.lastTap = 0;
+      container.assetPath = texturePath;
+      
+      container.on('pointerdown', function(e) {
+        if (selectedContainer === null || selectedContainer === this) {
+          this.data = e.data;
+          this.dragging = true;
+          const pos = this.data.getLocalPosition(this.parent);
+          this.dragOffset = { x: pos.x - this.x, y: pos.y - this.y };
+          e.stopPropagation();
+        }
+      });
+      container.on('pointermove', function(e) {
+        if (this.dragging) {
+          const newPos = this.data.getLocalPosition(this.parent);
+          this.x = newPos.x - this.dragOffset.x;
+          this.y = newPos.y - this.dragOffset.y;
+        }
+      });
+      container.on('pointerup', function(e) {
+        this.dragging = false;
+        this.data = null;
+      });
+      container.on('pointerupoutside', function(e) {
+        this.dragging = false;
+        this.data = null;
+      });
+      
+      container.on('pointertap', function(e) {
+        const now = Date.now();
+        if (now - this.lastTap < 300) {
+          if (selectedContainer === this) {
+            clearSelection();
+          } else {
+            setSelected(this);
+          }
+        }
+        this.lastTap = now;
+      });
+      
+      const texture = PIXI.Loader.shared.resources[texturePath].texture;
+      const sprite = new PIXI.Sprite(texture);
+      sprite.anchor.set(0.5);
+      sprite.scale.set(0.5);
+      container.addChild(sprite);
+      
+      draggableParts.push(container);
+      app.stage.addChild(container);
+      return container;
+    }
+    
+    /***********************
+     * Duplicate Selected Item
+     ***********************/
+    function duplicateSelected() {
+      if (!selectedContainer) return;
+      let assetName = selectedContainer.name;
+      let assetPath = selectedContainer.assetPath;
+      // Place duplicate in the top-left with a margin of 50px.
+      let newContainer = createDraggableSprite(assetName, assetPath, 50, 50);
+      newContainer.scale.x = selectedContainer.scale.x;
+      newContainer.scale.y = selectedContainer.scale.y;
+      newContainer.rotation = selectedContainer.rotation;
+      setSelected(newContainer);
+    }
+    
+    /***********************
+     * HTML-based Control Buttons
+     ***********************/
+    function createControlButtons() {
+      const controlContainer = document.getElementById("controlButtonsContainer");
+      // Define controls with emoji and callback function.
+      const controls = [
+        { emoji: '🗑️', action: () => { if (selectedContainer) { deleteSelected(); } } },
+        { emoji: '↔️', action: () => { if (selectedContainer) { selectedContainer.scale.x = -selectedContainer.scale.x; } } },
+        { emoji: '🚫', action: () => { clearSelection(); } },
+        { emoji: '👯', action: () => { duplicateSelected(); } },
+        { emoji: '🔝', action: () => { if (selectedContainer) { app.stage.removeChild(selectedContainer); app.stage.addChild(selectedContainer); } } },
+        { emoji: '💾', action: () => { exportStage(); } }
+      ];
+      
+      // Create a button element for each control.
+      controls.forEach(ctrl => {
+        const btn = document.createElement("button");
+        btn.textContent = ctrl.emoji;
+        btn.onclick = ctrl.action;
+        controlContainer.appendChild(btn);
+      });
+    }
+    
+    /***********************
+     * HTML-based Asset Buttons
+     ***********************/
+    function createAssetButtons() {
+      const assetContainer = document.getElementById("assetButtonsContainer");
+      // Updated order: baseface, nose, mouth, eyes, ear, brow, moustache, accessory.
+      const assetButtons = [
+        { type: 'baseface', emoji: '🙂' },
+        { type: 'nose', emoji: '👃' },
+        { type: 'mouth', emoji: '👄' },
+        { type: 'eyes', emoji: '👁️' },
+        { type: 'ear', emoji: '👂' },
+        { type: 'brow', emoji: '🐛' },
+        { type: 'moustache', emoji: '🥸' },
+        { type: 'accessory', emoji: '🕶️' }
+      ];
+      
+      assetButtons.forEach(btn => {
+        const button = document.createElement("button");
+        button.textContent = btn.emoji;
+        button.onclick = function() {
+          if (btn.type === 'baseface') {
+            Modal.openModal(btn.type, assetGroups[btn.type], function(asset) {
+              setBaseFace(asset);
+            });
+          } else {
+            Modal.openModal(btn.type, assetGroups[btn.type], function(asset) {
+              createDraggableSprite(asset.name, asset.path, 100, 100);
+            });
+          }
+        };
+        assetContainer.appendChild(button);
+      });
+    }
+    
+    /***********************
+     * Delete Selected (for PIXI elements)
+     ***********************/
+    function deleteSelected() {
+      if (selectedContainer) {
+        app.stage.removeChild(selectedContainer);
+        const index = draggableParts.indexOf(selectedContainer);
+        if (index !== -1) draggableParts.splice(index, 1);
+        clearSelection();
+      }
+    }
+    
+    /***********************
+     * Export Stage as Image with White Background
+     ***********************/
+    function exportStage() {
+      if (typeof app === "undefined") {
+        console.error("PIXI app is not defined.");
+        return;
+      }
+      // Get the exported canvas from PIXI.
+      const exportedCanvas = app.renderer.plugins.extract.canvas(app.stage);
+      // Create a temporary canvas with the same dimensions.
+      const finalCanvas = document.createElement("canvas");
+      finalCanvas.width = exportedCanvas.width;
+      finalCanvas.height = exportedCanvas.height;
+      const ctx = finalCanvas.getContext("2d");
+      // Fill with white.
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
+      // Draw the exported canvas on top.
+      ctx.drawImage(exportedCanvas, 0, 0);
+      // Trigger download.
+      const dataURL = finalCanvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.href = dataURL;
+      link.download = "face_assembly.png";
+      link.click();
+    }
+    
+  </script>
+</body>
+</html>
