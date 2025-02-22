@@ -16,6 +16,22 @@
       overflow: hidden;
     }
     canvas { display: block; }
+
+    /* Top Bar */
+    #topBar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      background: #000;
+      color: #fff;
+      text-align: center;
+      padding: 8px 0;
+      z-index: 250;
+      font-size: 20px;
+      font-weight: bold;
+    }
+    
     /* Control buttons container (bottom nav for controls) */
     #controlButtonsContainer {
       position: fixed;
@@ -38,6 +54,7 @@
       border: none;
       cursor: pointer;
     }
+    
     /* Asset buttons container (bottom nav for assets) */
     #assetButtonsContainer {
       position: fixed;
@@ -48,6 +65,7 @@
       padding: 4px 8px;  /* reduced padding */
       display: flex;
       flex-direction: row;
+      justify-content: center; /* center asset buttons */
       gap: 2px;         /* further reduced gap between buttons */
       overflow-x: auto;
       background: rgba(255,255,255,0.95);
@@ -65,6 +83,9 @@
   </style>
 </head>
 <body>
+  <!-- Fixed Top Bar -->
+  <div id="topBar">MONSTRO: AMIRA</div>
+  
   <!-- HTML-based Navigation Bars -->
   <div id="controlButtonsContainer"></div>
   <div id="assetButtonsContainer"></div>
