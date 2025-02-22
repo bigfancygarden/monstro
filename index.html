@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <!-- Responsive scaling -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MONSTRO: AMIRA</title>
+  <title>Face Assembly Game (Emoji Navigation with Modal)</title>
   <style>
     html, body {
       margin: 0;
@@ -386,7 +386,16 @@
         { emoji: '🚫', action: () => { clearSelection(); } },
         { emoji: '👯', action: () => { duplicateSelected(); } },
         { emoji: '🔝', action: () => { if (selectedContainer) { app.stage.removeChild(selectedContainer); app.stage.addChild(selectedContainer); } } },
-        { emoji: '💾', action: () => { exportStage(); } }
+        { emoji: '💾', action: () => { exportStage(); } },
+        { emoji: 'ℹ️', action: () => { 
+            // Call the function defined in popup.js to show the rules.
+            if (typeof showPopup === 'function') {
+              showPopup();
+            } else {
+              console.warn("Popup function is not defined.");
+            }
+          } 
+        }
       ];
       
       // Create a button element for each control.
