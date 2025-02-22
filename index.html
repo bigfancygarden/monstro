@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <!-- Responsive scaling -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Face Assembly Game (Emoji Navigation with Modal)</title>
+  <title>MONSTRO: AMIRA</title>
   <style>
     html, body {
       margin: 0;
@@ -425,7 +425,9 @@
             });
           } else {
             Modal.openModal(btn.type, assetGroups[btn.type], function(asset) {
-              createDraggableSprite(asset.name, asset.path, 100, 100);
+              // Create the new draggable sprite and immediately select it.
+              let newItem = createDraggableSprite(asset.name, asset.path, 100, 100);
+              setSelected(newItem);
             });
           }
         };
